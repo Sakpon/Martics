@@ -1,0 +1,45 @@
+---
+import Admin from '../layouts/Admin.astro';
+
+const db = Astro.locals.runtime.env.DB;
+const logs = await db
+  .prepare(`SELECT route, status, meta, created_at FROM api_logs ORDER BY id DESC LIMIT 100`)
+  .all<any>();
+const crons = await db
+  .prepare(`SELECT job, ok, detail, created_at FROM cron_runs ORDER BY id DESC LIMIT 20`)
+  .all<any>();
+---
+
+<Admin title="Traffic — Martics Admin">
+  <h1 class="text-2xl font-bold">Traffic &amp; cron</h1>
+
+  <h2 class="mt-6 text-lg font-semibold">Recent cron runs</h2>
+  <table class="mt-3 w-full text-sm">
+    <thead class="text-left text-slate-500"><tr><th>Job</th><th>OK</th><th>Detail</th><th>When</th></tr></thead>
+    <tbody>
+      {(crons.results ?? []).map((c: any) => (
+        <tr class="border-t">
+          <td class="py-1">{c.job}</td>
+          <td>{c.ok ? '✓' : '✗'}</td>
+          <td class="text-slate-500 max-w-xs truncate">{c.detail}</td>
+          <td class="text-slate-500">{c.created_at}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+
+  <h2 class="mt-10 text-lg font-semibold">API logs</h2>
+  <table class="mt-3 w-full text-sm">
+    <thead class="text-left text-slate-500"><tr><th>Route</th><th>Status</th><th>Meta</th><th>When</th></tr></thead>
+    <tbody>
+      {(logs.results ?? []).map((l: any) => (
+        <tr class="border-t">
+          <td class="py-1">{l.route}</td>
+          <td>{l.status}</td>
+          <td class="text-slate-500 max-w-xs truncate">{l.meta}</td>
+          <td class="text-slate-500">{l.created_at}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</Admin>

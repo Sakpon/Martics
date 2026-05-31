@@ -1,0 +1,6 @@
+-- Additive, per-statement migrations applied on each deploy with `|| true`
+-- (carest convention). One statement per line. Safe to re-run: failures from
+-- already-applied changes are ignored. Add new ALTERs at the bottom over time.
+--
+-- Example:
+-- ALTER TABLE members ADD COLUMN tags TEXT;

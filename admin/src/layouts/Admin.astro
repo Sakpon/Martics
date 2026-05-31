@@ -1,0 +1,45 @@
+---
+const { title = 'Martics Admin' } = Astro.props;
+const nav = [
+  ['Dashboard', '/'],
+  ['Members', '/members'],
+  ['Levels', '/levels'],
+  ['Content', '/content'],
+  ['Broadcast', '/broadcast'],
+  ['Traffic', '/traffic'],
+];
+const here = Astro.url.pathname;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap"
+    />
+  </head>
+  <body class="font-sans bg-slate-100 text-slate-900">
+    <div class="flex min-h-screen">
+      <aside class="w-56 shrink-0 bg-slate-900 text-slate-200 p-4">
+        <p class="text-lg font-bold text-white">Martics</p>
+        <nav class="mt-6 space-y-1 text-sm">
+          {nav.map(([label, href]) => (
+            <a
+              href={href}
+              class={`block rounded px-3 py-2 ${here === href ? 'bg-slate-700 text-white' : 'hover:bg-slate-800'}`}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      </aside>
+      <main class="flex-1 p-8">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

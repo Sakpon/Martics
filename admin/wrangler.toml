@@ -1,0 +1,11 @@
+# Cloudflare Pages (SSR) project for the admin portal.
+# Bind the SAME D1 database the Worker uses so admin reads/writes live data.
+name = "martics-admin"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-09"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "martics_db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"

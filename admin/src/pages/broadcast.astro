@@ -1,0 +1,74 @@
+---
+import Admin from '../layouts/Admin.astro';
+
+const db = Astro.locals.runtime.env.DB;
+let message = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const audience = String(form.get('audience') ?? 'all');
+  const levelId = form.get('level_id') ? Number(form.get('level_id')) : null;
+  const scheduledAt = String(form.get('scheduled_at') ?? '').trim();
+
+  await db
+    .prepare(
+      `INSERT INTO broadcasts (influencer_id, message, audience, audience_level_id, status, scheduled_at)
+       VALUES (1, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      String(form.get('message')),
+      audience,
+      audience === 'level' ? levelId : null,
+      scheduledAt ? 'scheduled' : 'scheduled',
+      scheduledAt || new Date().toISOString().slice(0, 19).replace('T', ' '),
+    )
+    .run();
+  message = scheduledAt ? 'Broadcast scheduled.' : 'Broadcast queued (sends within a minute).';
+}
+
+const levels = await db.prepare(`SELECT id, name FROM levels ORDER BY rank`).all<any>();
+const recent = await db
+  .prepare(`SELECT id, message, audience, status, sent_count, created_at FROM broadcasts ORDER BY id DESC LIMIT 10`)
+  .all<any>();
+---
+
+<Admin title="Broadcast — Martics Admin">
+  <h1 class="text-2xl font-bold">Broadcast</h1>
+  {message && <p class="mt-3 rounded bg-emerald-100 px-3 py-2 text-sm text-emerald-800">{message}</p>}
+
+  <form method="post" class="mt-6 grid max-w-lg gap-3">
+    <textarea name="message" rows="4" placeholder="Message…" required class="rounded border px-3 py-2"></textarea>
+
+    <label class="text-sm font-medium">Audience</label>
+    <select name="audience" class="rounded border px-3 py-2">
+      <option value="all">All active members</option>
+      <option value="level">A specific level</option>
+    </select>
+
+    <select name="level_id" class="rounded border px-3 py-2">
+      <option value="">(only used if audience = level)</option>
+      {(levels.results ?? []).map((l: any) => <option value={l.id}>{l.name}</option>)}
+    </select>
+
+    <label class="text-sm font-medium">Schedule (leave blank = send now)</label>
+    <input name="scheduled_at" placeholder="YYYY-MM-DD HH:MM:SS" class="rounded border px-3 py-2" />
+
+    <button class="rounded bg-emerald-600 px-4 py-2 text-white">Queue broadcast</button>
+  </form>
+
+  <h2 class="mt-10 text-lg font-semibold">Recent broadcasts</h2>
+  <table class="mt-3 w-full text-sm">
+    <thead class="text-left text-slate-500"><tr><th>Message</th><th>Audience</th><th>Status</th><th>Sent</th><th>Created</th></tr></thead>
+    <tbody>
+      {(recent.results ?? []).map((b: any) => (
+        <tr class="border-t">
+          <td class="py-2 max-w-xs truncate">{b.message}</td>
+          <td>{b.audience}</td>
+          <td>{b.status}</td>
+          <td class="font-mono">{b.sent_count}</td>
+          <td class="text-slate-500">{b.created_at}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</Admin>

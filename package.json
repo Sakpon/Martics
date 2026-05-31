@@ -1,0 +1,21 @@
+{
+  "name": "martics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Martics — LINE community platform for influencers to engage members across levels (Cloudflare Worker + D1 + KV).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit",
+    "db:apply": "wrangler d1 execute martics_db --file=./src/db/schema.sql",
+    "db:seed": "wrangler d1 execute martics_db --file=./src/db/seed.sql",
+    "db:apply:local": "wrangler d1 execute martics_db --local --file=./src/db/schema.sql",
+    "db:seed:local": "wrangler d1 execute martics_db --local --file=./src/db/seed.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.0.0"
+  }
+}

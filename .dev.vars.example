@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local `wrangler dev`. Do NOT commit real values.
+LINE_CHANNEL_SECRET=
+LINE_CHANNEL_ACCESS_TOKEN=
+CLAUDE_API_KEY=
+LIFF_ID=
