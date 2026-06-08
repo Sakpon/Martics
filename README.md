@@ -20,10 +20,35 @@ LINE (Messaging API webhook/push + LIFF)  ──▶  Cloudflare Worker "martics"
                               (members, levels, broadcasts,      (session, chat ctx,
                                content, engagement, logs)         locks, hot prompt)
 
-Astro Pages "martics-web"   → landing + LIFF (/profile)
+Astro Pages "martics-web"   → landing + LIFF (/profile) + /audit (AIO citation audit)
 Astro SSR  "martics-admin"  → dashboard, members, levels, content, broadcast, traffic
                               (gated by Cloudflare Access)
 ```
+
+## AIO citation audit (`/audit` on martics.co)
+
+A self-contained tool that measures how often Google's AI Overview cites
+**martics.co** for a list of search prompts (Thailand locale) and which competitors
+get cited instead — exports to Excel/CSV. It lives on the `martics-web` Pages project:
+
+- `web/public/audit/index.html` → served at `/audit/`.
+- `web/functions/audit/api/aio.js` → `POST /audit/api/aio`, a Pages Function that
+  calls **SerpApi** server-side (key stays secret) and returns the parsed result.
+- `web/functions/audit/_middleware.js` → **HTTP Basic Auth** gate scoped to the
+  `/audit/*` subtree, so the public landing/LIFF pages stay open.
+
+Set these on the **martics-web** Pages project (Settings → Environment variables):
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `SERPAPI_API_KEY` | yes | — | Mark as a **secret**. |
+| `AUDIT_TARGET` | no | `martics.co` | Domain to measure citation for. |
+| `BASIC_AUTH_USERNAME` | no | `martics` | Login user for `/audit`. |
+| `BASIC_AUTH_PASSWORD` | **yes** | — | No default — `/audit` returns 503 until set. Set a strong value. |
+
+Local preview: `cd web && SERPAPI_API_KEY=… BASIC_AUTH_PASSWORD=… npx wrangler pages dev dist`
+(after `npm run build`). To use Cloudflare Access instead of Basic Auth, delete
+`_middleware.js` and add an Access policy on the `/audit` path.
 
 ## Layout
 
