@@ -1,0 +1,276 @@
+---
+import Base from '../layouts/Base.astro';
+// AIO citation audit. Native Astro page (shared Base layout + Tailwind theme) so
+// it matches the rest of martics-web. Behind Basic Auth via
+// functions/audit/_middleware.js; data comes from POST /audit/api/aio.
+---
+
+<Base title="Martics · AIO Citation Audit">
+  <header class="sticky top-0 z-10 flex items-center justify-between gap-3 bg-emerald-700 px-4 py-3 text-white">
+    <b class="font-bold">Martics · AIO Audit</b>
+    <span class="text-sm text-emerald-100">Cloudflare edition</span>
+  </header>
+
+  <main class="mx-auto max-w-4xl px-4 py-6">
+    <h1 class="my-2 text-2xl font-bold sm:text-3xl">Run an AIO citation audit</h1>
+    <p class="text-sm text-slate-500">
+      Measures how often Google's AI Overview cites
+      <strong id="targetName" class="text-slate-700">martics.co</strong> for each prompt
+      (Thailand locale). One prompt per line; add
+      <code class="rounded bg-indigo-50 px-1.5 py-0.5 text-[0.85em]">| en</code> or
+      <code class="rounded bg-indigo-50 px-1.5 py-0.5 text-[0.85em]">| th</code> to set the language.
+    </p>
+
+    <div class="my-4 rounded-xl border border-slate-200 bg-white p-4">
+      <label for="prompts" class="mb-1 block font-semibold">Prompts</label>
+      <textarea
+        id="prompts"
+        class="min-h-[150px] w-full resize-y rounded-lg border border-slate-200 p-3 text-base"
+      >LINE community platform for creators | en
+แพลตฟอร์มชุมชนสำหรับครีเอเตอร์บน LINE | th
+How to engage LINE followers by tier | en
+Best tools for influencer member management | en
+LINE OA membership levels | en</textarea>
+      <p class="mt-1 text-sm text-slate-500" id="count"></p>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label for="nruns" class="mb-1 block font-semibold">Runs per prompt</label>
+          <input
+            id="nruns"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max="30"
+            value="3"
+            class="w-full rounded-lg border border-slate-200 p-3 text-base"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block font-semibold">Estimated max API calls</label>
+          <output id="est" class="block rounded-lg bg-slate-100 p-3">—</output>
+        </div>
+      </div>
+
+      <label class="my-4 flex items-center gap-2">
+        <input type="checkbox" id="confirm" class="h-5 w-5" />
+        <span>I understand this spends SerpApi credits.</span>
+      </label>
+
+      <div class="mt-4 flex flex-wrap gap-2.5">
+        <button
+          id="run"
+          class="min-h-[44px] rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >Run audit</button>
+      </div>
+    </div>
+
+    <div id="progress" class="my-4 hidden rounded-xl border border-slate-200 bg-white p-4">
+      <p id="plabel">Working…</p>
+      <div class="my-2.5 h-3 overflow-hidden rounded-full bg-slate-200">
+        <i id="pfill" class="block h-full w-0 bg-emerald-700 transition-[width] duration-300"></i>
+      </div>
+    </div>
+
+    <div id="results" class="hidden">
+      <h2 class="mt-6 text-lg font-semibold">Results</h2>
+      <p id="overall" class="text-sm text-slate-500"></p>
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="w-full border-collapse text-sm" id="ptable">
+          <thead>
+            <tr class="bg-emerald-700 text-left text-white">
+              <th class="whitespace-nowrap p-2.5">Prompt</th>
+              <th class="whitespace-nowrap p-2.5">Lang</th>
+              <th class="whitespace-nowrap p-2.5">Runs</th>
+              <th class="whitespace-nowrap p-2.5">AIO rate</th>
+              <th class="whitespace-nowrap p-2.5">Martics rate (95% CI)</th>
+              <th class="whitespace-nowrap p-2.5">Top cited domains</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <h2 class="mt-6 text-lg font-semibold">Competitor share of voice</h2>
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="w-full border-collapse text-sm" id="ctable">
+          <thead>
+            <tr class="bg-emerald-700 text-left text-white">
+              <th class="whitespace-nowrap p-2.5">Domain</th>
+              <th class="whitespace-nowrap p-2.5">Times cited</th>
+              <th class="whitespace-nowrap p-2.5">Is Martics?</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-2.5">
+        <button id="xlsx" class="min-h-[44px] rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800">Download Excel</button>
+        <button id="csv" class="min-h-[44px] rounded-lg border border-emerald-700 px-5 py-3 font-semibold text-emerald-700">Download CSV</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="px-4 py-6 text-center text-xs text-slate-500">
+    De-personalized Thailand datacenter view via SerpApi · trust trends over absolute %
+  </footer>
+
+  <!-- SheetJS for Excel export -->
+  <script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script is:inline>
+    const $ = (s) => document.querySelector(s);
+    let TARGET = 'martics.co';
+    // Tailwind classes applied to result cells (no global CSS).
+    const HIT = 'p-2.5 whitespace-nowrap bg-emerald-100 font-bold';
+    const MISS = 'p-2.5 whitespace-nowrap bg-red-100';
+    const CELL = 'p-2.5 whitespace-nowrap border-b border-slate-200';
+
+    function parsePrompts(t) {
+      return t.split('\n').map((l) => l.trim()).filter(Boolean).map((l, i) => {
+        let hl = 'en', q = l;
+        if (l.includes('|')) {
+          const p = l.split('|');
+          const tail = p[p.length - 1].trim().toLowerCase();
+          if (tail === 'en' || tail === 'th') { hl = tail; q = p.slice(0, -1).join('|').trim(); }
+        }
+        return { id: `p${i + 1}-${hl}`, q, hl };
+      });
+    }
+    function wilson(s, n) {
+      if (!n) return [0, 1];
+      const z = 1.96, p = s / n, d = 1 + z * z / n;
+      const c = (p + z * z / (2 * n)) / d;
+      const m = z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n) / d;
+      return [Math.max(0, c - m), Math.min(1, c + m)];
+    }
+    const pct = (x) => Math.round(x * 100) + '%';
+
+    function update() {
+      const lines = $('#prompts').value.split('\n').map((s) => s.trim()).filter(Boolean);
+      const n = Math.max(1, parseInt($('#nruns').value || '1', 10));
+      $('#est').textContent = (lines.length * n * 2) + ' (worst case)';
+      $('#count').textContent = lines.length + ' / 30 prompts';
+      $('#count').className = lines.length > 30 ? 'mt-1 text-sm text-red-700' : 'mt-1 text-sm text-slate-500';
+    }
+    $('#prompts').addEventListener('input', update);
+    $('#nruns').addEventListener('input', update);
+    update();
+
+    let LAST = null;
+    async function runOne(p) {
+      const r = await fetch('/audit/api/aio', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ q: p.q, hl: p.hl }),
+      });
+      if (!r.ok) throw new Error('API ' + r.status);
+      return r.json();
+    }
+
+    $('#run').addEventListener('click', async () => {
+      if (!$('#confirm').checked) { alert('Please confirm the cost first.'); return; }
+      const prompts = parsePrompts($('#prompts').value);
+      if (!prompts.length) { alert('Enter at least one prompt.'); return; }
+      if (prompts.length > 30) { alert('Max 30 prompts.'); return; }
+      const nruns = Math.max(1, Math.min(30, parseInt($('#nruns').value || '1', 10)));
+      $('#run').disabled = true;
+      $('#results').classList.add('hidden');
+      $('#progress').classList.remove('hidden');
+      const total = prompts.length * nruns;
+      let done = 0, calls = 0;
+      const rows = [], comp = {};
+      for (const p of prompts) {
+        let aio = 0, td = 0, runs = 0;
+        const doms = {};
+        for (let i = 0; i < nruns; i++) {
+          $('#plabel').textContent = `${p.id} — run ${i + 1}/${nruns}`;
+          try {
+            const res = await runOne(p);
+            calls += res.calls || 0; runs++;
+            if (res.target) TARGET = res.target;
+            if (res.aio_present) {
+              aio++;
+              (res.domains || []).forEach((d) => { doms[d] = (doms[d] || 0) + 1; comp[d] = (comp[d] || 0) + 1; });
+            }
+            if (res.target_cited) td++;
+          } catch (e) { runs++; }
+          done++;
+          $('#pfill').style.width = (100 * done / total) + '%';
+        }
+        const ci = wilson(td, runs);
+        const top = Object.entries(doms).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        rows.push({ ...p, runs, aio, td, aioRate: aio / runs, tdRate: td / runs, ci, top });
+      }
+      $('#targetName').textContent = TARGET;
+      LAST = { rows, comp, calls, nruns, date: new Date().toISOString().slice(0, 10) };
+      render(LAST);
+      $('#progress').classList.add('hidden');
+      $('#run').disabled = false;
+    });
+
+    function render(d) {
+      const tb = $('#ptable tbody'); tb.innerHTML = '';
+      let R = 0, A = 0, T = 0;
+      d.rows.forEach((r) => {
+        R += r.runs; A += r.aio; T += r.td;
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          `<td class="${CELL}">${esc(r.q)}</td>` +
+          `<td class="${CELL}">${r.hl}</td>` +
+          `<td class="${CELL}">${r.runs}</td>` +
+          `<td class="${CELL}">${pct(r.aioRate)}</td>` +
+          `<td class="${r.tdRate > 0 ? HIT : MISS}">${pct(r.tdRate)} (${pct(r.ci[0])}–${pct(r.ci[1])})</td>` +
+          `<td class="${CELL}">${r.top.map((x) => esc(x[0]) + ' (' + x[1] + ')').join(', ') || '—'}</td>`;
+        tb.appendChild(tr);
+      });
+      const ci = wilson(T, R);
+      $('#overall').innerHTML =
+        `Overall AIO trigger rate <b>${pct(A / R)}</b> · ` +
+        `Martics citation rate <b>${pct(T / R)}</b> (95% CI ${pct(ci[0])}–${pct(ci[1])}) · ` +
+        `${d.calls} SerpApi calls`;
+      const cb = $('#ctable tbody'); cb.innerHTML = '';
+      Object.entries(d.comp).sort((a, b) => b[1] - a[1]).forEach(([dom, n]) => {
+        const isT = dom === TARGET || dom.endsWith('.' + TARGET);
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          `<td class="${isT ? HIT : CELL}">${esc(dom)}</td>` +
+          `<td class="${CELL}">${n}</td>` +
+          `<td class="${CELL}">${isT ? 'YES' : ''}</td>`;
+        cb.appendChild(tr);
+      });
+      $('#results').classList.remove('hidden');
+    }
+    function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+    function rowsForExport(d) {
+      const head = ['Prompt', 'Lang', 'Runs', 'AIO rate %', 'Martics rate %', 'CI low %', 'CI high %', 'Top cited domains'];
+      const body = d.rows.map((r) => [
+        r.q, r.hl, r.runs, Math.round(r.aioRate * 100), Math.round(r.tdRate * 100),
+        Math.round(r.ci[0] * 100), Math.round(r.ci[1] * 100),
+        r.top.map((x) => x[0] + ' (' + x[1] + ')').join('; '),
+      ]);
+      return [head, ...body];
+    }
+    $('#xlsx').addEventListener('click', () => {
+      if (!LAST) return;
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rowsForExport(LAST)), 'By prompt');
+      const comp = [
+        ['Domain', 'Times cited', 'Is Martics?'],
+        ...Object.entries(LAST.comp).sort((a, b) => b[1] - a[1]).map(([d2, n]) =>
+          [d2, n, (d2 === TARGET || d2.endsWith('.' + TARGET)) ? 'YES' : '']),
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(comp), 'Competitor SoV');
+      XLSX.writeFile(wb, `${LAST.date}-aio-citation-audit.xlsx`);
+    });
+    $('#csv').addEventListener('click', () => {
+      if (!LAST) return;
+      const csv = rowsForExport(LAST).map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      a.download = `${LAST.date}-aio-citation-audit.csv`;
+      a.click();
+    });
+  </script>
+</Base>
