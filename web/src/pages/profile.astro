@@ -1,0 +1,45 @@
+---
+import Base from '../layouts/Base.astro';
+// LIFF profile view — opened inside LINE. Initializes the LIFF SDK, grabs the
+// access token, and calls the Worker /api/profile-card to render the member's tier.
+const liffId = import.meta.env.PUBLIC_LIFF_ID ?? 'REPLACE_LIFF_ID';
+const apiBase = import.meta.env.PUBLIC_API_BASE ?? 'https://martics.example.workers.dev';
+---
+
+<Base title="My profile — Martics">
+  <main class="mx-auto max-w-md px-6 py-12">
+    <div id="card" class="rounded-2xl bg-white p-6 shadow">
+      <p class="text-slate-500">Loading your profile…</p>
+    </div>
+  </main>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script define:vars={{ liffId, apiBase }}>
+    async function main() {
+      const card = document.getElementById('card');
+      try {
+        await liff.init({ liffId });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        const token = liff.getAccessToken();
+        const res = await fetch(`${apiBase}/api/profile-card`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('api');
+        const d = await res.json();
+        const color = d.level?.color ?? '#666';
+        card.innerHTML = `
+          <p class="text-sm text-slate-500">${d.displayName ?? 'Member'}</p>
+          <p class="mt-1 text-3xl font-bold" style="color:${color}">${d.level?.name ?? 'Member'}</p>
+          <p class="mt-3 text-sm text-slate-700">${d.level?.perks ?? ''}</p>
+          <p class="mt-4 text-xs text-slate-400">Engagement score: ${d.engagementScore ?? 0}</p>
+        `;
+      } catch (e) {
+        card.innerHTML = '<p class="text-red-500">Could not load profile. Open this page from inside LINE.</p>';
+      }
+    }
+    main();
+  </script>
+</Base>

@@ -1,0 +1,80 @@
+---
+import Admin from '../../layouts/Admin.astro';
+
+const db = Astro.locals.runtime.env.DB;
+const id = Number(Astro.params.id);
+
+// Handle a manual level change (the core "manual tiers" workflow).
+let message = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const newLevelId = Number(form.get('level_id'));
+  const reason = String(form.get('reason') ?? '');
+  const adminEmail = Astro.request.headers.get('cf-access-authenticated-user-email') ?? 'admin';
+
+  const current = await db.prepare(`SELECT level_id FROM members WHERE id = ?`).bind(id).first<{ level_id: number | null }>();
+
+  await db.batch([
+    db.prepare(`UPDATE members SET level_id = ? WHERE id = ?`).bind(newLevelId, id),
+    db
+      .prepare(
+        `INSERT INTO member_level_history (member_id, from_level_id, to_level_id, changed_by, reason)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(id, current?.level_id ?? null, newLevelId, adminEmail, reason),
+  ]);
+  message = 'Level updated.';
+}
+
+const member = await db
+  .prepare(
+    `SELECT m.*, l.name AS level_name FROM members m LEFT JOIN levels l ON l.id = m.level_id WHERE m.id = ?`,
+  )
+  .bind(id)
+  .first<any>();
+
+const levels = await db.prepare(`SELECT id, name, rank FROM levels ORDER BY rank`).all<any>();
+const history = await db
+  .prepare(
+    `SELECT h.changed_at, h.reason, h.changed_by, f.name AS from_name, t.name AS to_name
+     FROM member_level_history h
+     LEFT JOIN levels f ON f.id = h.from_level_id
+     LEFT JOIN levels t ON t.id = h.to_level_id
+     WHERE h.member_id = ? ORDER BY h.id DESC LIMIT 20`,
+  )
+  .bind(id)
+  .all<any>();
+---
+
+<Admin title="Member — Martics Admin">
+  {member ? (
+    <>
+      <h1 class="text-2xl font-bold">{member.display_name ?? '(unknown)'}</h1>
+      <p class="mt-1 text-slate-500">
+        Level: <strong>{member.level_name ?? '—'}</strong> · Score: {member.engagement_score} · Joined {member.joined_at}
+      </p>
+
+      {message && <p class="mt-3 rounded bg-emerald-100 px-3 py-2 text-sm text-emerald-800">{message}</p>}
+
+      <form method="post" class="mt-6 max-w-sm space-y-3">
+        <label class="block text-sm font-medium">Assign level</label>
+        <select name="level_id" class="w-full rounded border px-3 py-2">
+          {(levels.results ?? []).map((l: any) => (
+            <option value={l.id} selected={l.id === member.level_id}>{l.name}</option>
+          ))}
+        </select>
+        <input name="reason" placeholder="Reason (optional)" class="w-full rounded border px-3 py-2 text-sm" />
+        <button class="rounded bg-emerald-600 px-4 py-2 text-white">Save</button>
+      </form>
+
+      <h2 class="mt-10 text-lg font-semibold">Level history</h2>
+      <ul class="mt-3 space-y-1 text-sm text-slate-600">
+        {(history.results ?? []).map((h: any) => (
+          <li>{h.changed_at}: {h.from_name ?? '—'} → {h.to_name ?? '—'} by {h.changed_by} {h.reason ? `(${h.reason})` : ''}</li>
+        ))}
+      </ul>
+    </>
+  ) : (
+    <p>Member not found.</p>
+  )}
+</Admin>

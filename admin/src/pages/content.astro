@@ -1,0 +1,48 @@
+---
+import Admin from '../layouts/Admin.astro';
+
+const db = Astro.locals.runtime.env.DB;
+let message = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  await db
+    .prepare(
+      `INSERT INTO content (influencer_id, title, body, min_level_rank, published_at)
+       VALUES (1, ?, ?, ?, datetime('now'))`,
+    )
+    .bind(String(form.get('title')), String(form.get('body')), Number(form.get('min_level_rank') ?? 0))
+    .run();
+  message = 'Content published.';
+}
+
+const { results } = await db
+  .prepare(`SELECT id, title, min_level_rank, published_at FROM content ORDER BY id DESC LIMIT 50`)
+  .all<any>();
+---
+
+<Admin title="Content — Martics Admin">
+  <h1 class="text-2xl font-bold">Content</h1>
+  {message && <p class="mt-3 rounded bg-emerald-100 px-3 py-2 text-sm text-emerald-800">{message}</p>}
+
+  <form method="post" class="mt-6 grid max-w-lg gap-3">
+    <input name="title" placeholder="Title" required class="rounded border px-3 py-2" />
+    <textarea name="body" rows="4" placeholder="Body…" required class="rounded border px-3 py-2"></textarea>
+    <label class="text-sm font-medium">Minimum level rank to view (0 = everyone)</label>
+    <input name="min_level_rank" type="number" value="0" class="rounded border px-3 py-2" />
+    <button class="rounded bg-emerald-600 px-4 py-2 text-white">Publish</button>
+  </form>
+
+  <table class="mt-10 w-full text-sm">
+    <thead class="text-left text-slate-500"><tr><th>Title</th><th>Min rank</th><th>Published</th></tr></thead>
+    <tbody>
+      {(results ?? []).map((c: any) => (
+        <tr class="border-t">
+          <td class="py-2">{c.title}</td>
+          <td class="font-mono">{c.min_level_rank}</td>
+          <td class="text-slate-500">{c.published_at}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</Admin>

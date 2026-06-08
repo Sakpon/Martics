@@ -1,0 +1,47 @@
+---
+import Admin from '../layouts/Admin.astro';
+import Stat from '../components/Stat.astro';
+
+// Dashboard: headline counts straight from D1 (Cloudflare Access guards the route).
+const db = Astro.locals.runtime.env.DB;
+
+const stats = await db
+  .prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM members WHERE status='active') AS active_members,
+       (SELECT COUNT(*) FROM members WHERE date(joined_at)=date('now')) AS new_today,
+       (SELECT COUNT(*) FROM levels) AS levels,
+       (SELECT COUNT(*) FROM broadcasts WHERE status='sent') AS broadcasts_sent`,
+  )
+  .first<{ active_members: number; new_today: number; levels: number; broadcasts_sent: number }>();
+
+const byLevel = await db
+  .prepare(
+    `SELECT l.name, l.color, COUNT(m.id) AS n
+     FROM levels l LEFT JOIN members m ON m.level_id = l.id AND m.status='active'
+     GROUP BY l.id ORDER BY l.rank`,
+  )
+  .all<{ name: string; color: string | null; n: number }>();
+---
+
+<Admin title="Dashboard — Martics Admin">
+  <h1 class="text-2xl font-bold">Dashboard</h1>
+
+  <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+    <Stat label="Active members" value={stats?.active_members ?? 0} />
+    <Stat label="New today" value={stats?.new_today ?? 0} />
+    <Stat label="Levels" value={stats?.levels ?? 0} />
+    <Stat label="Broadcasts sent" value={stats?.broadcasts_sent ?? 0} />
+  </div>
+
+  <h2 class="mt-10 text-lg font-semibold">Members by level</h2>
+  <div class="mt-3 space-y-2">
+    {(byLevel.results ?? []).map((r) => (
+      <div class="flex items-center gap-3">
+        <span class="inline-block h-3 w-3 rounded-full" style={`background:${r.color ?? '#888'}`}></span>
+        <span class="w-24">{r.name}</span>
+        <span class="font-mono">{r.n}</span>
+      </div>
+    ))}
+  </div>
+</Admin>

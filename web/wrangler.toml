@@ -1,0 +1,4 @@
+# Cloudflare Pages project for the public/LIFF site.
+name = "martics-web"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-09"
